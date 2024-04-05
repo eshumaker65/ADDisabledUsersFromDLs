@@ -2,15 +2,16 @@
 #                                                       Impport Common Functions                                                    #
 #####################################################################################################################################
 Clear-Host
+$ErrorActionPreference = "Stop"
 
 # Import custom module
-Import-Module MezShell
+Import-Module MezShell 
 
 # Set app name global var
 $Global:ApplicationName = "Check Disabled Accounts"
 
 # Set params for logging
-$LogFilePath = MezSetLog -ApplicationName $Global:ApplicationName -TechCode 'IT' -LocalLogging 1 -ConsoleLogging 1
+MezSetLog -ApplicationName $Global:ApplicationName -TechCode 'IT' -LocalLogging 1 -ConsoleLogging 1
 
 # Start
 $MessageContent = '************ Starting ' + $Global:ApplicationName + '.'; MezWriteLog $MessageContent -Color Green
@@ -32,7 +33,35 @@ if (1 -eq 1) {  # Looking for users that are disabled, but not in the disabled o
     MezWriteLog 'Scan complete for disabled users in the wrong OU.' -color green
 }
 
-if (1 -eq 1) {  # This checks that disabled users don't have random groups attached
+if (1 -eq 1) {  # Check that disabled users don't have managers
+    # Fetch users with the Manager property
+    $users = Get-ADUser -Server HQS-DC03 -Filter * -SearchBase "OU=Disabled Users,DC=hq,DC=mezzetta,DC=com" -SearchScope "OneLevel" -Properties Manager
+
+    # Loop through each user and check if they have a manager assigned
+    foreach ($user in $users) {
+        if ($user.Manager) {
+            $MessageContent = 'User '+$user.name+' has a manager assigned. Removing.'; MezWriteLog $MessageContent -color yellow
+            Set-ADUser -Identity $user -Manager $null
+        } else {
+            $MessageContent = 'User '+$user.name+' has no manager.'; MezWriteLog $MessageContent -color green
+        }
+    }
+
+
+    $users = Get-ADUser -Server HQS-DC03 -Filter * -SearchBase "OU=Disabled Cleared Users,OU=Disabled Users,DC=hq,DC=mezzetta,DC=com" -SearchScope "OneLevel" -Properties Manager
+
+    # Loop through each user and check if they have a manager assigned
+    foreach ($user in $users) {
+        if ($user.Manager) {
+            $MessageContent = 'User '+$user.name+' has a manager assigned. Removing.'; MezWriteLog $MessageContent -color yellow
+            Set-ADUser -Identity $user -Manager $null
+        } else {
+            $MessageContent = 'User '+$user.name+' has no manager.'; MezWriteLog $MessageContent -color green
+        }
+    }
+}
+
+if (1 -eq 1) {  # This checks that disabled users don't have random groups attached, move to cleared
     MezWriteLog 'Scanning disabled users for incorrect groups.' -color green
     # Query AD.
     $DisabledUsers = Get-ADUser -server HQS-DC03 -Filter * -SearchBase “OU=Disabled Users,DC=hq,DC=mezzetta,DC=com” -searchscope "OneLevel" 
@@ -58,11 +87,6 @@ if (1 -eq 1) {  # This checks that disabled users don't have random groups attac
         Move-ADObject -Identity $user -TargetPath 'OU=Disabled Cleared Users,OU=Disabled Users,DC=hq,DC=mezzetta,DC=com'
     }
     MezWriteLog 'Scan complete for incorrect groups.' -color green
-}
-
-if (1 -eq 1) {  # Check that disabled users don't have managers
-    # remember, they could be in either disabled users or disabled cleared users
-
 }
 
 #####################################################################################################################################
